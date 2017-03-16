@@ -5,6 +5,7 @@
     print("Load the environment variables\n");
 
     // Load environment variables
+    $is_debug = true;
     $dotenv = new Dotenv\Dotenv(__DIR__);
     $dotenv->load();
     $tenant_id = getenv('TENANT_ID');
@@ -24,11 +25,12 @@
         curl_setopt_array($curl, $request_array);
 
         $resp = json_decode(curl_exec($curl));
-        print("Completed auth request with status of\n");
-        var_dump($resp);
-        curl_close($curl);
+        
+        if ($is_debug) print("Completed auth request with status of\n");
 
-        echo $resp;
+        if ($is_debug) var_dump($resp);
+        
+        curl_close($curl);
 
         return $resp;
 
@@ -49,13 +51,15 @@
             ));
 
 
-        print("Dump the $curl_opt_array \n");
-        var_dump($curl_opt_array);
+        if ($is_debug) print("Dump the $curl_opt_array \n");
+        if ($is_debug) var_dump($curl_opt_array);
 
 
-        print("Make request for auth token\n");
+        if ($is_debug) print("Make request for auth token\n");
+        
         $resp = make_request($curl_opt_array);
-        var_dump($resp);
+        
+        if ($is_debug) var_dump($resp);
 
         $access_token = $resp->access_token;
 
