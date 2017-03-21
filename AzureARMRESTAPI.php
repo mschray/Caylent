@@ -1,95 +1,96 @@
 <?php
 
-    require 'vendor/autoload.php';
-
-    print("Load the environment variables\n");
-
-    // Load environment variables
-    $is_debug = true;
-    $dotenv = new Dotenv\Dotenv(__DIR__);
-    $dotenv->load();
-    $tenant_id = getenv('TENANT_ID');
-    $client_id = getenv('CLIENT_ID');
-    $client_secret = getenv('CLIENT_SECRET');
-    $subscription_id = getenv('SUBSCRIPTION_ID');
-    $resource_group_name = getenv('RESOURCE_GROUP_NAME');
-
-    $access_token = get_auth_token($tenant_id, $client_id, $client_secret);
-
-    dump_var("Access Token" + $access_token);
-
-    function make_request($request_array)
+    function make_request(array $request_array, $ret_code = null)
     {
 
         $curl  = curl_init();
         curl_setopt_array($curl, $request_array);
 
-        $resp = json_decode(curl_exec($curl));
+        $result = curl_exec($curl);
+        $resp = json_decode($result);
         
-        if ($is_debug) print("Completed auth request with status of\n");
+        // List of Curl error numbers - https://curl.haxx.se/libcurl/c/libcurl-errors.html
+        print("Curl Error number: "); 
+        print(curl_errno($curl));
+        print("\n");
 
-        if ($is_debug) var_dump($resp);
+        print("Http status code ");
+        $http_status = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+        print($http_status);
+        print("\n");
+        //print("Completed auth request with status of\n");
+
+        //var_dump($resp);
         
         curl_close($curl);
 
-        return $resp;
-
+        if ($ret_code)
+            return $http_status;
+        else 
+            return $resp;
 
     }
 
-    function get_auth_token($a_tenant_id, $a_client_id, $a_client_secret)
+    function get_auth_token($tenant_id, $client_id, $client_secret)
     {
         $curl_opt_array = array(
             CURLOPT_POST => 1,
             CURLOPT_RETURNTRANSFER => 1,
-            CURLOPT_URL => "https://login.microsoftonline.com:443/$a_tenant_id/oauth2/token??api-version=1.0",
+            CURLOPT_URL => "https://login.microsoftonline.com:443/$tenant_id/oauth2/token??api-version=1.0",
             CURLOPT_POSTFIELDS => array(
                 "grant_type" => "client_credentials",
                 "resource" => "https://management.core.windows.net/",
-                "client_id" => "$a_client_id",
-                "client_secret" => "$a_client_secret"
+                "client_id" => "$client_id",
+                "client_secret" => "$client_secret"
             ));
 
 
-        if ($is_debug) print("Dump the $curl_opt_array \n");
-        if ($is_debug) var_dump($curl_opt_array);
+        //var_dump($curl_opt_array);
 
-
-        if ($is_debug) print("Make request for auth token\n");
+        print("Make request for auth token\n");
         
         $resp = make_request($curl_opt_array);
         
-        if ($is_debug) var_dump($resp);
+        //print_r($resp);
+        //var_dump($resp);
 
         $access_token = $resp->access_token;
 
         return $access_token;
     }      
 
+//******************
+// THESE ARE THE FUNCTONS THAT ARE PART OF THE DEPLOYMENT OPERATIONS PORTION OF THE RESOURCE MANAGER REST INTERFACE
+// https://docs.microsoft.com/en-us/rest/api/resources/deployments
+//******************
 
-    
+    function create_resource_group($subscription_id,$resource_group_name,$access_token,$azure_location)
+    {
+        /* Create new resource group and deploy from ARM template */
+        $data = array("location" => $azure_location);
+        $data_json_location = json_encode($data);
+        
+        // Initialize curl and set options
+        $curl_opt_array = array(
+            CURLOPT_CUSTOMREQUEST => "PUT",
+            CURLOPT_RETURNTRANSFER => 1,
+            CURLOPT_HEADER => 0,
+            CURLOPT_URL => "https://management.azure.com/subscriptions/$subscription_id/resourcegroups/$resource_group_name?api-version=2016-06-01",
+            CURLOPT_HTTPHEADER => array(
+                "Content-type: Application/json",
+                "Authorization: Bearer $access_token"),
+            CURLOPT_POSTFIELDS => $data_json_location
+        );
 
-    // /* Create new resource group and deploy from ARM template */
-    // $data = array("location" => "eastus");
-    // $data_json = json_encode($data);
-    // // Initialize curl and set options
-    // $curl = curl_init();
-    // curl_setopt_array($curl, array(
-    //     CURLOPT_CUSTOMREQUEST => "PUT",
-    //     CURLOPT_RETURNTRANSFER => 1,
-    //     CURLOPT_HEADER => 0,
-    //     CURLOPT_URL => "https://management.azure.com/subscriptions/$subscription_id/resourcegroups/$resource_group_name?api-version=2016-06-01",
-    //     CURLOPT_HTTPHEADER => array(
-    //         "Content-type: Application/json",
-    //         "Authorization: Bearer $access_token"),
-    //     CURLOPT_POSTFIELDS => $data_json
-    // ));
+        $resp = make_request($curl_opt_array);
+        
+        //print_r($resp);
 
-    // $resp = curl_exec($curl);
-    // print_r($resp);
-    // curl_close($curl);
+        return $resp;
 
-    // $deployment_name = "FirstCaylentDeployment3";
+    }
+
+  // $deployment_name = "FirstCaylentDeployment3";
     // $template_uri = "https://raw.githubusercontent.com/Azure/azure-quickstart-templates/master/101-vm-simple-linux/azuredeploy.json";
     // $adminUsername = "KwadwoTest";
     // $adminPassword = "KwadwoTest123!!!";
@@ -118,21 +119,339 @@
     //     )
     // );
     // $data_json = json_encode($data);
-    // // Initialize curl and set options
-    // $curl = curl_init();
-    // $curl = curl_init();
-    // curl_setopt_array($curl, array(
-    //     CURLOPT_CUSTOMREQUEST => "PUT",
-    //     CURLOPT_RETURNTRANSFER => 1,
-    //     CURLOPT_HEADER => 0,
-    //     CURLOPT_URL => "https://management.azure.com/subscriptions/$subscription_id/resourcegroups/$resource_group_name/providers/microsoft.resources/deployments/$deployment_name?api-version=2016-09-01",
-    //     CURLOPT_HTTPHEADER => array(
-    //         "Content-type: Application/json",
-    //         "Authorization: Bearer $access_token"),
-    //     CURLOPT_POSTFIELDS => $data_json
-    // ));
 
-    // $resp = json_decode(curl_exec($curl));
-    // print_r($resp);
-    // curl_close($curl); 
+    function create_or_update_deployment($subscription_id, $resource_group_name, $deployment_name, $access_token, $data)
+    {
+        $data_json = json_encode($data);
+        // Initialize curl and set options
+        $curl_opt_array = array(
+            CURLOPT_CUSTOMREQUEST => "PUT",
+            CURLOPT_RETURNTRANSFER => 1,
+            CURLOPT_HEADER => 0,
+            CURLOPT_URL => "https://management.azure.com/subscriptions/$subscription_id/resourcegroups/$resource_group_name/providers/microsoft.resources/deployments/$deployment_name?api-version=2016-09-01",
+            CURLOPT_HTTPHEADER => array(
+                "Content-type: Application/json",
+                "Authorization: Bearer $access_token"),
+            CURLOPT_POSTFIELDS => $data_json
+        );
+
+        $resp = make_request($curl_opt_array);
+        
+        //print_r($resp);
+
+        return $resp;
+    }
+
+    
+    function cancel_deployment($subscription_id, $resource_group_name, $deployment_name, $access_token)
+    {
+        //POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Resources/deployments/{deploymentName}/cancel?api-version=2016-09-01
+
+        // Initialize curl and set options
+        $curl_opt_array = array(
+            CURLOPT_CUSTOMREQUEST => "POST",
+            CURLOPT_RETURNTRANSFER => 1,
+            CURLOPT_HEADER => 0,
+            CURLOPT_URL => "https://management.azure.com/subscriptions/$subscription_id/resourcegroups/$resource_group_name/deployments/$deployment_name/cancel?api-version=2016-09-01",
+            CURLOPT_HTTPHEADER => array(
+                "Content-type: Application/json",
+                "Authorization: Bearer $access_token")
+        );
+
+        $resp = make_request($curl_opt_array);
+        
+        //print_r($resp);
+
+        return $resp;
+
+
+    }
+
+    function check_existence($subscription_id, $resource_group_name, $deployment_name, $access_token)
+    {
+        
+        //HEAD /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Resources/deployments/{deploymentName}?api-version=2016-09-01
+
+        // Initialize curl and set options
+        $curl_opt_array = array(
+            CURLOPT_CUSTOMREQUEST => "HEAD",
+            CURLOPT_RETURNTRANSFER => 1,
+            CURLOPT_NOBODY => true,
+            CURLOPT_HEADER => 0,
+            CURLOPT_URL => "https://management.azure.com/subscriptions/$subscription_id/resourcegroups/$resource_group_name/deployments/$deployment_name?api-version=2016-09-01",
+            CURLOPT_HTTPHEADER => array(
+                "Content-type: Application/json",
+                "Authorization: Bearer $access_token")
+        );
+
+        print("About to make request to make_request for check_existence\n");
+        $resp = make_request($curl_opt_array,true);
+        
+        print("Response from check_existence\n");
+        print_r($resp);
+        print("after Response from check_existence\n");
+
+        return $resp;
+
+    }
+
+    function delete_deployment($subscription_id, $resource_group_name, $deployment_name, $access_token)
+    {
+        //DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Resources/deployments/{deploymentName}?api-version=2016-09-01
+
+        // Initialize curl and set options
+        $curl_opt_array = array(
+            CURLOPT_CUSTOMREQUEST => "DELETE",
+            CURLOPT_RETURNTRANSFER => 1,
+            CURLOPT_HEADER => 0,
+            CURLOPT_URL => "https://management.azure.com/subscriptions/{$subscription_id}/resourcegroups/$resource_group_name/providers/Microsoft.Resources/deployments/$deployment_name?api-version=2016-09-01",
+            CURLOPT_HTTPHEADER => array(
+                "Content-type: Application/json",
+                "Authorization: Bearer $access_token")
+        );
+
+        $resp = make_request($curl_opt_array,true);
+        
+        print("Response from delete_deployment\n");
+        print_r($resp);
+        print("after Response from delete_deployment\n");
+
+        return $resp;
+
+    }
+
+    function export_template($subscription_id, $resource_group_name, $deployment_name, $access_token)
+    {
+        //POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Resources/deployments/{deploymentName}/exportTemplate?api-version=2016-09-01
+        
+        // Initialize curl and set options
+        $curl_opt_array = array(
+            CURLOPT_CUSTOMREQUEST => "POST",
+            CURLOPT_RETURNTRANSFER => 1,
+            CURLOPT_HEADER => 0,
+            CURLOPT_URL => "https://management.azure.com/subscriptions/$subscription_id/resourcegroups/$resource_group_name/providers/Microsoft.Resources/deployments/$deployment_name/exportTemplate?api-version=2016-09-01",
+            CURLOPT_HTTPHEADER => array(
+                "Content-type: Application/json",
+                "Authorization: Bearer $access_token")
+        );
+
+        $resp = make_request($curl_opt_array);
+        
+        print("Response from export_template\n");
+        print_r($resp);
+        print("after Response from export_template\n");
+
+        return $resp;
+
+
+    }
+
+    function get_deployment($subscription_id, $resource_group_name, $deployment_name, $access_token)
+    {
+        //GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Resources/deployments/{deploymentName}?api-version=2016-09-01
+                
+        // Initialize curl and set options
+        $curl_opt_array = array(
+            CURLOPT_CUSTOMREQUEST => "GET",
+            CURLOPT_RETURNTRANSFER => 1,
+            CURLOPT_HEADER => 0,
+            CURLOPT_URL => "https://management.azure.com/subscriptions/$subscription_id/resourcegroups/$resource_group_name/providers/Microsoft.Resources/deployments/$deployment_name?api-version=2016-09-01",
+            CURLOPT_HTTPHEADER => array(
+                "Content-type: Application/json",
+                "Authorization: Bearer $access_token")
+        );
+
+        var_dump($curl_opt_array);
+
+        $resp = make_request($curl_opt_array);
+        
+        print("Response from get_deployment\n");
+        print_r($resp);
+        print("after Response from get_deployment\n");
+
+        return $resp;
+
+
+    }
+
+    function list_deployments($subscription_id, $resource_group_name, $deployment_name, $access_token)
+    {
+        //GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Resources/deployments/?api-version=2016-09-01[&$filter&$top]
+
+        // Initialize curl and set options
+        $curl_opt_array = array(
+            CURLOPT_CUSTOMREQUEST => "GET",
+            CURLOPT_RETURNTRANSFER => 1,
+            CURLOPT_HEADER => 0,
+            CURLOPT_URL => "https://management.azure.com/subscriptions/$subscription_id/resourcegroups/$resource_group_name/providers/Microsoft.Resources/deployments/?api-version=2016-09-01",
+            CURLOPT_HTTPHEADER => array(
+                "Content-type: Application/json",
+                "Authorization: Bearer $access_token")
+        );
+
+        $resp = make_request($curl_opt_array);
+        
+        print("Response from list_deployments\n");
+        print_r($resp);
+        print("after Response from list_deployments\n");
+
+        return $resp;
+
+    }
+
+    function validate_deployment($subscription_id, $resource_group_name, $deployment_name, $data)
+    {
+        //POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.Resources/deployments/{deploymentName}/validate?api-version=2016-09-01
+
+        // Initialize curl and set options
+        $curl_opt_array = array(
+            CURLOPT_CUSTOMREQUEST => "POST",
+            CURLOPT_RETURNTRANSFER => 1,
+            CURLOPT_HEADER => 0,
+            CURLOPT_URL => "https://management.azure.com/subscriptions/$subscription_id/resourcegroups/$resource_group_name/providers/Microsoft.Resources/deployments/$deployment_name/validate?api-version=2016-09-01",
+            CURLOPT_HTTPHEADER => array(
+                "Content-type: Application/json",
+                "Authorization: Bearer $access_token"),
+            CURLOPT_POSTFIELDS => $data
+        );
+
+        $resp = make_request($curl_opt_array);
+        
+        print_r($resp);
+
+        return $resp;
+    }
+
+//******************
+// THESE ARE THE FUNCTONS THAT ARE PART OF THE DEPLOYMENT OPERATIONS PORTION OF THE RESOURCE MANAGER REST INTERFACE
+// https://docs.microsoft.com/en-us/rest/api/resources/deploymentoperations
+//******************
+
+    //https://docs.microsoft.com/en-us/rest/api/resources/deploymentoperations
+    function get_list_deployment_operations($subscription_id, $resource_group_name, $deployment_name, $access_token)
+    {
+        //https://management.azure.com/subscriptions/$a_subscription_id/resourcegroups/$resource_group_name/deployments/$deployment_name/operations?api-version=2016-09-01
+
+      // Initialize curl and set options
+        $curl_opt_array = array(
+            CURLOPT_CUSTOMREQUEST => "GET",
+            CURLOPT_RETURNTRANSFER => 1,
+            CURLOPT_HEADER => 0,
+            CURLOPT_URL => "https://management.azure.com/subscriptions/$subscription_id/resourcegroups/$resource_group_name/deployments/$deployment_name/operations?api-version=2016-09-01",
+            CURLOPT_HTTPHEADER => array(
+                "Content-type: Application/json",
+                "Authorization: Bearer $access_token")
+        );
+
+        $resp = make_request($curl_opt_array);
+        
+        print_r($resp);
+
+        return $resp;
+
+
+    }
+
+    //https://docs.microsoft.com/en-us/rest/api/resources/deploymentoperations
+    function get_deployment_operation($subscription_id, $resource_group_name, $deployment_name, $operation_id ,$access_token)
+    {
+        //GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/deployments/{deploymentName}/operations/{operationId}?api-version=2016-09-01
+
+        // Initialize curl and set options
+        $curl_opt_array = array(
+            CURLOPT_CUSTOMREQUEST => "GET",
+            CURLOPT_RETURNTRANSFER => 1,
+            CURLOPT_HEADER => 0,
+            CURLOPT_URL => "https://management.azure.com/subscriptions/$subscription_id/resourcegroups/$resource_group_name/deployments/$deployment_name/operations/$operation_id?api-version=2016-09-01",
+            CURLOPT_HTTPHEADER => array(
+                "Content-type: Application/json",
+                "Authorization: Bearer $access_token")
+        );
+
+        $resp = make_request($curl_opt_array);
+        
+        //print_r($resp);
+
+        return $resp;
+
+    }
+  
+//******************
+// THESE ARE THE FUNCTONS THAT ARE PART OF THE SUBSCRIPTION PORTION OF THE RESOURCE MANAGER REST INTERFACE
+// https://docs.microsoft.com/en-us/rest/api/resources/subscriptions
+//******************
+
+    //https://docs.microsoft.com/en-us/rest/api/resources/subscriptions#Subscriptions_Get
+    function get_subscription($subscription_id, $access_token)
+    {
+        //GET /subscriptions/{subscriptionId}?api-version=2016-06-01
+
+        // Initialize curl and set options
+        $curl_opt_array = array(
+            CURLOPT_CUSTOMREQUEST => "GET",
+            CURLOPT_RETURNTRANSFER => 1,
+            CURLOPT_HEADER => 0,
+            CURLOPT_URL => "https://management.azure.com/subscriptions/$subscription_id?api-version=2016-09-01",
+            CURLOPT_HTTPHEADER => array(
+                "Content-type: Application/json",
+                "Authorization: Bearer $access_token")
+        );
+
+        $resp = make_request($curl_opt_array);
+        
+        //print_r($resp);
+
+        return $resp;
+
+    }
+
+    //https://docs.microsoft.com/en-us/rest/api/resources/subscriptions#Subscriptions_List
+    function list_subscriptions($access_token)
+    {
+        //GET /subscriptions?api-version=2016-06-01
+
+        // Initialize curl and set options
+        $curl_opt_array = array(
+            CURLOPT_CUSTOMREQUEST => "GET",
+            CURLOPT_RETURNTRANSFER => 1,
+            CURLOPT_HEADER => 0,
+            CURLOPT_URL => "https://management.azure.com/subscriptions?api-version=2016-09-01",
+            CURLOPT_HTTPHEADER => array(
+                "Content-type: Application/json",
+                "Authorization: Bearer $access_token")
+        );
+
+        $resp = make_request($curl_opt_array);
+        
+        //print_r($resp);
+
+        return $resp;
+
+    }
+
+    //https://docs.microsoft.com/en-us/rest/api/resources/subscriptions#Subscriptions_ListLocations
+    function list_locations($subscription_id, $access_token)
+    {
+        //GET /subscriptions/{subscriptionId}/locations?api-version=2016-06-01
+
+        // Initialize curl and set options
+        $curl_opt_array = array(
+            CURLOPT_CUSTOMREQUEST => "GET",
+            CURLOPT_RETURNTRANSFER => 1,
+            CURLOPT_HEADER => 0,
+            CURLOPT_URL => "https://management.azure.com/subscriptions/$subscription_id/locations?api-version=2016-06-01",
+            CURLOPT_HTTPHEADER => array(
+                "Content-type: Application/json",
+                "Authorization: Bearer $access_token")
+        );
+
+        $resp = make_request($curl_opt_array);
+        
+        //print_r($resp);
+
+        return $resp;
+
+    }
+
+
 ?>
